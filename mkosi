@@ -792,8 +792,26 @@ def run_postinst_script(args, workspace, run_build_script):
         shutil.copy2(args.postinst_script,
                      os.path.join(workspace, "root", "root/postinst"))
 
+        src_postinst_script_d = args.postinst_script + '.d'
+        postinst_script_d = os.path.join(workspace, "root", "root/postinst.d")
+        postinst_run_d = os.path.join(workspace, "root", "root/run.postinst.d")
+        has_postinst_d = os.path.isdir(src_postinst_script_d)
+        if has_postinst_d:
+            shutil.copytree(src_postinst_script_d, postinst_script_d)
+
+            with open(postinst_run_d, "w") as f:
+                f.writelines([
+                    "#!/bin/sh\nset -e\n",
+                    *['/root/postinst.d/{} "$@"\n'.format(script) for script in sorted(os.listdir(postinst_script_d)) if os.access(os.path.join(postinst_script_d, script), os.X_OK)]
+                ])
+            os.chmod(postinst_run_d, 0o755)
+
         run_workspace_command(args, workspace, "/root/postinst", "build" if run_build_script else "final")
         os.unlink(os.path.join(workspace, "root", "root/postinst"))
+        if has_postinst_d:
+            run_workspace_command(args, workspace, "/root/run.postinst.d", "build" if run_build_script else "final")
+            shutil.rmtree(postinst_script_d)
+            os.unlink(postinst_run_d)
 
 def install_boot_loader_arch(args, workspace):
     patch_file(os.path.join(workspace, "root", "etc/mkinitcpio.conf"),
